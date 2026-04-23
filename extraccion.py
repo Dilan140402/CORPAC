@@ -6,6 +6,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # -------------------------
 # CONFIG
@@ -22,31 +24,27 @@ OUTPUT_DIR = "data_corpac"
 # DRIVER
 # -------------------------
 def iniciar_driver():
-
     download_path = os.path.abspath("data_corpac")
+    if not os.path.exists(download_path):
+        os.makedirs(download_path)
 
     options = Options()
-    options.add_argument("--headless=new")
+    options.add_argument("--headless=new") # Obligatorio en GitHub Actions
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_experimental_option("prefs", {
-    "download.default_directory": download_path,
-    "download.prompt_for_download": False,
-    "download.directory_upgrade": True,
-    "safebrowsing.enabled": True,
-    "plugins.always_open_pdf_externally": True
-})
-
+    
+    # Configuración de descarga
     prefs = {
         "download.default_directory": download_path,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True
     }
-
     options.add_experimental_option("prefs", prefs)
 
-    driver = webdriver.Chrome(options=options)
+    # Uso de webdriver-manager para instalar el driver automáticamente
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
     return driver
 
 
