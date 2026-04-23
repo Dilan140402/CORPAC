@@ -83,102 +83,80 @@ def descargar_con_selenium(driver, url):
 # SCRAPER PRINCIPAL
 # -------------------------
 def scrape_categoria(nombre, url):
-
     driver = iniciar_driver()
-    wait = WebDriverWait(driver, 10)
-
     print(f"\n🔎 Scrapeando {nombre.upper()}...")
     driver.get(url)
 
-    time.sleep(6)
+    time.sleep(6) # Esperar carga inicial
 
-    # obtener botones de años
     years = driver.find_elements(By.XPATH, "//*[contains(text(),'Año')]")
     year_texts = [y.text.strip() for y in years if y.text.strip()]
 
     print("Años encontrados:", len(year_texts))
 
     for year_text in year_texts:
-
         print(f"\n📂 Entrando a {year_text}")
         year = "".join(filter(str.isdigit, year_text))
         folder = os.path.join(OUTPUT_DIR, nombre, year)
         os.makedirs(folder, exist_ok=True)
 
-        cambiar_carpeta_descarga(driver, os.path.abspath(folder))
         try:
             year_elem = driver.find_element(By.XPATH, f"//*[contains(text(),'{year_text}')]")
+            # Usar JavaScript para el click del año para evitar que se bloquee
+            driver.execute_script("arguments[0].click();", year_elem)
+            time.sleep(5) 
         except:
-            print("No se encontró:", year_text)
+            print("No se encontró o no se pudo cliquear:", year_text)
             continue
 
-        # scroll + click
-        driver.execute_script("arguments[0].scrollIntoView();", year_elem)
-        time.sleep(1)
-        driver.execute_script("arguments[0].click();", year_elem)
-
-        # 🔥 esperar cambio de URL (clave)
-        time.sleep(5)
-        current_url = driver.current_url
-        print("URL actual:", current_url)
-
-        # 🔥 esperar que carguen links
-        time.sleep(5)
-
-        # buscar excels
+        # BUSCAR LINKS DE DESCARGA
         botones = driver.find_elements(By.XPATH, "//a[contains(@href,'download')]")
+        print(f"Total botones encontrados en {year_text}: {len(botones)}")
 
-        print("Total botones encontrados:", len(botones))
-
-        hrefs = []
         for i in range(len(botones)):
             try:
-                botones = driver.find_elements(By.XPATH, "//a[contains(@href,'download')]")
-                boton = botones[i]
-
-                href = boton.get_attribute("href")
+                # Volvemos a buscar para evitar elementos caducados (StaleElement)
+                btns = driver.find_elements(By.XPATH, "//a[contains(@href,'download')]")
+                href = btns[i].get_attribute("href")
 
                 if href:
-                    print("📥 Descargando:", href)
-
-                    driver.execute_script("arguments[0].scrollIntoView();", boton)
-                    time.sleep(1)
-
-                    boton.click()
-                    time.sleep(4)
+                    # USAR REQUESTS DIRECTAMENTE (Ignoramos el click de Selenium)
+                    descargar_archivo(href, folder)
+                    time.sleep(1) # Pequeña pausa entre archivos
 
             except Exception as e:
-                print("Error botón:", e)
+                print(f"Error procesando link {i}: {e}")
 
-        for href in hrefs:
-
-            if ".xls" in href or ".xlsx" in href:
-
-                print("📥 Excel encontrado:", href)
-
-                year = "".join(filter(str.isdigit, year_text))
-                folder = os.path.join(OUTPUT_DIR, nombre, year)
-                os.makedirs(folder, exist_ok=True)
-
-                descargar_archivo(href, folder)
+    driver.quit() # Importante cerrar el driver al terminar cada categoría
 
 def descargar_archivo(url, folder):
-
+    # Headers para evitar que el servidor de Corpac bloquee a GitHub
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    }
     try:
-        filename = url.split("/")[-1].split("?")[0]
+        # Generar un nombre basado en el ID del link para evitar duplicados
+        if "i=" in url:
+            file_id = url.split("i=")[-1].split("&")[0]
+            filename = f"reporte_{file_id}.xlsx"
+        else:
+            filename = url.split("/")[-1].split("?")[0] or "archivo.xlsx"
+            
         path = os.path.join(folder, filename)
 
-        r = requests.get(url, timeout=10)
+        # Descarga con timeout más largo para GitHub
+        r = requests.get(url, headers=headers, timeout=30, stream=True)
 
         if r.status_code == 200:
             with open(path, "wb") as f:
-                f.write(r.content)
-            print("✅ Descargado:", filename)
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"  ✅ Guardado: {filename}")
         else:
-            print("❌ Error descarga:", url)
+            print(f"  ❌ Error HTTP {r.status_code} en: {url}")
 
     except Exception as e:
-        print("❌ Error:", e)
+        print(f"  ❌ Error de conexión: {e}")
 # -------------------------
 # MAIN
 # -------------------------
