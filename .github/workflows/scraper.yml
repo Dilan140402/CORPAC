@@ -34,7 +34,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Ejecutar Scraper
-      run: python scraper.py
+      run: python extraccion.py
 
     - name: Guardar cambios en el repositorio
       run: |
